@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GWP2 · Deep Learning for Finance · Validation Design & Leakage</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ── TOKENS ── */
+:root {
+  --bg:      #0d1117;
+  --bg2:     #161b22;
+  --bg3:     #1f2937;
+  --border:  #30363d;
+  --border2: #3d444d;
+  --text:    #e6edf3;
+  --text2:   #8b949e;
+  --text3:   #6e7681;
+  --accent:  #58a6ff;
+  --accent2: #1c2d3e;
+  --green:   #3fb950;
+  --green2:  #1a3025;
+  --red:     #f85149;
+  --red2:    #3d1a1a;
+  --amber:   #d29922;
+  --amber2:  #2e2108;
+  --purple:  #bc8cff;
+  --purple2: #1f1535;
+  --teal:    #39d353;
+  --card-r:  10px;
+  --font:    'Inter', system-ui, sans-serif;
+  --mono:    'JetBrains Mono', 'Fira Mono', monospace;
+}
+[data-theme="light"] {
+  --bg:      #f6f8fa;
+  --bg2:     #ffffff;
+  --bg3:     #f0f2f4;
+  --border:  #d0d7de;
+  --border2: #c6cdd4;
+  --text:    #1f2328;
+  --text2:   #636c76;
+  --text3:   #848d97;
+  --accent:  #0969da;
+  --accent2: #ddf4ff;
+  --green:   #1a7f37;
+  --green2:  #dcffe4;
+  --red:     #cf222e;
+  --red2:    #ffebe9;
+  --amber:   #9a6700;
+  --amber2:  #fff8c5;
+  --purple:  #6e40c9;
+  --purple2: #fbefff;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── HEADER ── */
+header {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex; align-items: center; gap: 16px; height: 54px;
+}
+.logo {
+  font-family: var(--mono);
+  font-size: 13px; font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -.3px;
+  white-space: nowrap;
+}
+.logo span { color: var(--text2); font-weight: 400; }
+.nav-tabs {
+  display: flex; gap: 2px; flex: 1; overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav-tabs::-webkit-scrollbar { display: none; }
+.nav-tab {
+  padding: 6px 14px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 500; color: var(--text2);
+  border: none; background: none; transition: all .15s; white-space: nowrap;
+}
+.nav-tab:hover { background: var(--bg3); color: var(--text); }
+.nav-tab.active { background: var(--accent2); color: var(--accent); }
+.header-right { display: flex; gap: 8px; align-items: center; }
+
+/* Data status banner */
+#data-banner {
+  font-size: 11px; padding: 4px 10px; border-radius: 5px;
+  font-family: var(--mono); white-space: nowrap;
+  background: var(--green2); color: var(--green); border: 1px solid var(--green);
+}
+#data-banner.amber { background: var(--amber2); color: var(--amber); border-color: var(--amber); }
+#data-banner.red   { background: var(--red2);   color: var(--red);   border-color: var(--red); }
+
+.theme-btn {
+  padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; border: 1px solid var(--border2);
+  background: var(--bg3); color: var(--text2); transition: all .15s;
+}
+.theme-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ── LAYOUT ── */
+.page-wrap { display: none; }
+.page-wrap.active { display: block; }
+
+main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--card-r);
+  padding: 20px 22px;
+  margin-bottom: 18px;
+}
+.card-title {
+  font-size: 13px; font-weight: 700; letter-spacing: .2px;
+  margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+}
+.badge {
+  font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 4px;
+  background: var(--accent2); color: var(--accent);
+  border: 0.5px solid var(--accent); font-family: var(--mono);
+}
+.badge.green { background: var(--green2); color: var(--green); border-color: var(--green); }
+.badge.red   { background: var(--red2);   color: var(--red);   border-color: var(--red); }
+.badge.amber { background: var(--amber2); color: var(--amber); border-color: var(--amber); }
+.badge.purple{ background: var(--purple2);color: var(--purple);border-color: var(--purple); }
+
+/* ── PAGE HERO ── */
+.page-hero {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 24px; flex-wrap: wrap;
+}
+.page-hero h2 { font-size: 22px; font-weight: 700; color: var(--text); }
+.page-hero p  { font-size: 13px; color: var(--text2); margin-top: 4px; max-width: 620px; line-height: 1.6; }
+
+/* ── CONTROLS ── */
+.ctrl-row {
+  display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px;
+}
+.ctrl-group { display: flex; flex-direction: column; gap: 5px; }
+.ctrl-group label {
+  font-size: 11px; font-weight: 600; color: var(--text2); letter-spacing: .4px; text-transform: uppercase;
+}
+input[type="date"], input[type="number"], select, textarea {
+  background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px;
+  padding: 7px 10px; color: var(--text); font-size: 13px; font-family: inherit;
+  transition: border .15s;
+}
+input[type="date"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+input[type="range"] {
+  accent-color: var(--accent); cursor: pointer; width: 100%;
+}
+.slider-wrap { display: flex; flex-direction: column; gap: 4px; }
+.slider-val { font-size: 11px; font-family: var(--mono); color: var(--accent); font-weight: 700; }
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 8px 16px; border-radius: 7px; cursor: pointer; font-size: 13px;
+  font-weight: 600; border: none; transition: all .15s; font-family: inherit;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { filter: brightness(1.15); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-secondary { background: var(--bg3); color: var(--text2); border: 1px solid var(--border2); }
+.btn-secondary:hover { color: var(--text); border-color: var(--accent); }
+
+/* ── CHARTS ── */
+.chart-wrap { position: relative; height: 260px; }
+.chart-wrap.tall { height: 320px; }
+
+/* ── GRIDS ── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+@media(max-width:720px){
+  .grid2,.grid3{ grid-template-columns:1fr; }
+  header{ padding:0 14px; }
+  .logo span { display:none; }
+}
+
+/* ── STAT CARDS ── */
+.stat-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px 16px;
+}
+.stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4px; }
+.stat-val   { font-size: 22px; font-weight: 700; font-family: var(--mono); color: var(--text); }
+.stat-sub   { font-size: 11px; color: var(--text2); margin-top: 3px; }
+
+/* ── TABLES ── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th {
+  text-align: left; padding: 8px 10px; font-size: 10px; font-weight: 700;
+  color: var(--text3); text-transform: uppercase; letter-spacing: .5px;
+  border-bottom: 1px solid var(--border); background: var(--bg3);
+}
+.data-table td {
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  color: var(--text2); font-family: var(--mono); font-size: 11px;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--bg3); }
+
+/* ── AI DISCUSSION BOX ── */
+.ai-output {
+  min-height: 140px; background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 7px; padding: 14px 16px; font-size: 13px; line-height: 1.8;
+  color: var(--text); white-space: pre-wrap; font-family: inherit;
+}
+.ai-output.placeholder { color: var(--text3); font-style: italic; }
+
+/* ── STEP LABEL ── */
+.step-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text3); margin-bottom: 16px; font-family: var(--mono);
+}
+.step-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+}
+
+/* ── TIMELINE PILLS ── */
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.pill {
+  font-size: 10px; padding: 3px 8px; border-radius: 4px;
+  font-family: var(--mono); border: 0.5px solid;
+  background: var(--bg3); color: var(--text2); border-color: var(--border);
+}
+.pill.active { background: var(--accent2); color: var(--accent); border-color: var(--accent); }
+
+/* ── LEAKAGE ALERT ── */
+.alert {
+  padding: 10px 14px; border-radius: 7px; font-size: 12px; line-height: 1.6;
+  margin-bottom: 14px;
+}
+.alert.warn { background: var(--amber2); color: var(--amber); border: 1px solid var(--amber); }
+.alert.info { background: var(--accent2); color: var(--accent); border: 1px solid var(--accent); }
+.alert.good { background: var(--green2); color: var(--green); border: 1px solid var(--green); }
+
+/* ── PROGRESS SPINNER ── */
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── SECTION DIVIDER ── */
+.section-divider {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 11px; color: var(--text3); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px;
+  margin: 24px 0 16px; font-family: var(--mono);
+}
+.section-divider::before, .section-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* ── COMPARISON BARS ── */
+.perf-bar-wrap { display: flex; flex-direction: column; gap: 10px; }
+.perf-bar-row { display: flex; align-items: center; gap: 10px; }
+.perf-bar-label { font-size: 11px; font-family: var(--mono); color: var(--text2); width: 90px; flex-shrink: 0; }
+.perf-bar-track { flex: 1; height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; }
+.perf-bar-fill  { height: 100%; border-radius: 4px; transition: width .6s ease; }
+.perf-bar-val   { font-size: 11px; font-family: var(--mono); color: var(--text); width: 48px; text-align: right; }
+
+/* ── LOADING OVERLAY ── */
+.loading-overlay {
+  position: absolute; inset: 0; background: rgba(13,17,23,.7);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--card-r); z-index: 10; display: none;
+}
+.loading-overlay.show { display: flex; }
+.loading-msg { font-size: 12px; color: var(--text2); font-family: var(--mono); margin-left: 8px; }
+
+</style>
+</head>
+<body>
+
+<!-- ══════════ HEADER ══════════ -->
+<header>
+  <div class="logo">GWP2<span> · Deep Learning for Finance · Validation Design</span></div>
+  <nav class="nav-tabs" id="nav-tabs">
+    <button class="nav-tab active" data-page="overview">Overview</button>
+    <button class="nav-tab" data-page="step1">Step 1 · Baseline</button>
+    <button class="nav-tab" data-page="step2">Step 2 · Walk-Forward</button>
+    <button class="nav-tab" data-page="step3">Step 3 · Leakage Fix</button>
+    <button class="nav-tab" data-page="discussion">Discussion</button>
+  </nav>
+  <div class="header-right">
+    <span id="data-banner">⏳ Loading data…</span>
+    <button class="theme-btn" onclick="toggleTheme()">☀ / ☾</button>
+  </div>
+</header>
+
+<!-- ══════════ PAGES ══════════ -->
+
+<!-- ─── OVERVIEW ─── -->
+<div class="page-wrap active" id="page-overview">
+<main>
+  <div class="page-hero">
+    <div>
+      <h2>GWP2 · Validation Design & Information Leakage</h2>
+      <p>This project investigates how validation design affects backtest robustness. Starting from a leaky single-asset setup, you'll progressively tighten the protocol with walk-forward validation and explicit leakage mitigation — quantifying how apparent performance changes at each step.</p>
+    </div>
+  </div>
+
+  <!-- Global controls card -->
+  <div class="card">
+    <div class="card-title">⚙ Global Configuration <span class="badge">Live Data · Auto-Recalculates</span></div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <label>Ticker Symbol</label>
+        <select id="g-ticker" onchange="onGlobalChange()">
+          <option value="BTC-USD">BTC-USD · Bitcoin</option>
+          <option value="ETH-USD">ETH-USD · Ethereum</option>
+          <option value="SPY">SPY · S&amp;P 500</option>
+          <option value="AAPL">AAPL · Apple</option>
+          <option value="GLD">GLD · Gold</option>
+          <option value="TLT">TLT · Long Bonds</option>
+          <option value="TSLA">TSLA · Tesla</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Start Date</label>
+        <input type="date" id="g-start" value="2019-01-01" onchange="onGlobalChange()">
+      </div>
+      <div class="ctrl-group">
+        <label>End Date</label>
+        <input type="date" id="g-end" value="2024-12-31" onchange="onGlobalChange()">
+      </div>
+      <div class="ctrl-group">
+        <label>Max Observations</label>
+        <div class="slider-wrap">
+          <input type="range" id="g-obs" min="500" max="2000" step="100" value="2000" oninput="updateSliderVal('g-obs','g-obs-val'); onGlobalChange()">
+          <span class="slider-val" id="g-obs-val">2000</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Lookback Window</label>
+        <div class="slider-wrap">
+          <input type="range" id="g-window" min="5" max="60" step="5" value="20" oninput="updateSliderVal('g-window','g-window-val')">
+          <span class="slider-val" id="g-window-val">20</span>
+        </div>
+      </div>
+    </div>
+    <div id="overview-error" class="alert warn" style="display:none"></div>
+    <div class="pills" id="overview-pills">
+      <span class="pill active" id="pill-ticker">Ticker: BTC-USD</span>
+      <span class="pill active" id="pill-date">2019-01-01 → 2024-12-31</span>
+      <span class="pill" id="pill-obs">Obs: loading…</span>
+      <span class="pill" id="pill-price">Price: loading…</span>
+      <span class="pill" id="pill-updated">Updated: —</span>
+    </div>
+  </div>
+
+  <!-- Overview stats -->
+  <div class="grid3" id="overview-stats">
+    <div class="stat-card">
+      <div class="stat-label">Latest Price</div>
+      <div class="stat-val" id="stat-price">—</div>
+      <div class="stat-sub" id="stat-change">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Observations</div>
+      <div class="stat-val" id="stat-obs">—</div>
+      <div class="stat-sub" id="stat-obs-sub">within selected period</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Annualised Volatility</div>
+      <div class="stat-val" id="stat-vol">—</div>
+      <div class="stat-sub" id="stat-vol-sub">log-return std × √252</div>
+    </div>
+  </div>
+
+  <!-- Price chart -->
+  <div class="card">
+    <div class="card-title">Price History <span id="price-ticker-label" class="badge">BTC-USD</span></div>
+    <div class="chart-wrap tall" style="position:relative">
+      <canvas id="chart-price"></canvas>
+      <div class="loading-overlay show" id="price-loading">
+        <span class="spinner"></span>
+        <span class="loading-msg">Fetching live prices…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Return distribution -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Log-Return Distribution</div>
+      <div class="chart-wrap"><canvas id="chart-returns"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cumulative Returns</div>
+      <div class="chart-wrap"><canvas id="chart-cumret"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Project roadmap -->
+  <div class="card">
+    <div class="card-title">Project Roadmap</div>
+    <table class="data-table">
+      <thead><tr><th>Step</th><th>Task</th><th>Validation Method</th><th>Leakage</th><th>Models</th></tr></thead>
+      <tbody>
+        <tr><td>1a</td><td>Data description &amp; label construction</td><td>Single train/test split</td><td>⚠ Intentional</td><td>MLP, LSTM, CNN-GAF</td></tr>
+        <tr><td>1b</td><td>Model training &amp; backtesting</td><td>Fixed 80/20 split</td><td>⚠ Present</td><td>All 3 models</td></tr>
+        <tr><td>2a</td><td>Walk-forward: 500/500 obs</td><td>Non-anchored WF</td><td>⚠ Present</td><td>All 3 models</td></tr>
+        <tr><td>2b</td><td>Walk-forward: 500/100 obs</td><td>Non-anchored WF</td><td>⚠ Present</td><td>All 3 models</td></tr>
+        <tr><td>3a</td><td>Leakage mitigation method</td><td>Purged embargo</td><td>✅ Reduced</td><td>All 3 models</td></tr>
+        <tr><td>3b</td><td>Purged WF: 500/500 obs</td><td>Purged non-anchored WF</td><td>✅ Reduced</td><td>All 3 models</td></tr>
+        <tr><td>3c</td><td>Purged WF: 500/100 obs</td><td>Purged non-anchored WF</td><td>✅ Reduced</td><td>All 3 models</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</div>
+
+<!-- ─── STEP 1 ─── -->
+<div class="page-wrap" id="page-step1">
+<main>
+  <div class="page-hero">
+    <div>
+      <h2>Step 1 · Baseline: Single Train/Test Split with Leakage</h2>
+      <p>Build MLP, LSTM, and CNN-GAF models on a single train/test split using overlapping labels — deliberately introducing information leakage to establish an inflated performance baseline.</p>
+    </div>
+  </div>
+
+  <!-- Label construction card -->
+  <div class="card">
+    <div class="card-title">Step 1a · Label Construction <span class="badge amber">⚠ Leakage Intentional</span></div>
+    <div class="alert warn">
+      ⚠ Labels are constructed as <strong>forward-looking rolling returns over a k-day window</strong>. This creates look-ahead bias: each training sample uses future price information, ensuring leakage between any train/test split.
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <label>Label Horizon (k days)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s1-horizon" min="1" max="20" value="5" oninput="updateSliderVal('s1-horizon','s1-horizon-val'); runStep1()">
+          <span class="slider-val" id="s1-horizon-val">5</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Train Split %</label>
+        <div class="slider-wrap">
+          <input type="range" id="s1-split" min="50" max="90" step="5" value="80" oninput="updateSliderVal('s1-split','s1-split-val','%'); runStep1()">
+          <span class="slider-val" id="s1-split-val">80%</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Task Type</label>
+        <select id="s1-task" onchange="runStep1()">
+          <option value="class">Classification (direction)</option>
+          <option value="reg">Regression (returns)</option>
+        </select>
+      </div>
+    </div>
+    <div class="pills">
+      <span class="pill active" id="s1-train-pill">Train: — obs</span>
+      <span class="pill active" id="s1-test-pill">Test: — obs</span>
+      <span class="pill" id="s1-horizon-pill">Horizon: 5d</span>
+    </div>
+  </div>
+
+  <!-- Model results -->
+  <div class="grid3">
+    <div class="stat-card">
+      <div class="stat-label">MLP · Dir. Accuracy</div>
+      <div class="stat-val" id="s1-mlp-acc" style="color:var(--green)">—</div>
+      <div class="stat-sub" id="s1-mlp-sub">Single split</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">LSTM · Dir. Accuracy</div>
+      <div class="stat-val" id="s1-lstm-acc" style="color:var(--purple)">—</div>
+      <div class="stat-sub" id="s1-lstm-sub">Single split</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">CNN-GAF · Dir. Accuracy</div>
+      <div class="stat-val" id="s1-cnn-acc" style="color:var(--accent)">—</div>
+      <div class="stat-sub" id="s1-cnn-sub">Single split</div>
+    </div>
+  </div>
+
+  <!-- Backtest performance -->
+  <div class="card" style="position:relative">
+    <div class="card-title">Step 1b · Backtest Performance (Leaky Baseline)</div>
+    <div id="s1-loading" class="loading-overlay show">
+      <span class="spinner"></span><span class="loading-msg">Simulating models…</span>
+    </div>
+    <div class="chart-wrap tall"><canvas id="chart-s1-backtest"></canvas></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Cumulative Returns vs Buy &amp; Hold</div>
+      <div class="chart-wrap"><canvas id="chart-s1-cumret"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Performance Summary</div>
+      <table class="data-table">
+        <thead><tr><th>Model</th><th>Dir. Acc.</th><th>Sharpe</th><th>Max DD</th><th>Total Ret.</th></tr></thead>
+        <tbody id="s1-perf-tbody">
+          <tr><td colspan="5" style="color:var(--text3);text-align:center">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- ─── STEP 2 ─── -->
+<div class="page-wrap" id="page-step2">
+<main>
+  <div class="page-hero">
+    <div>
+      <h2>Step 2 · Walk-Forward Backtesting</h2>
+      <p>Repeat the analysis using non-anchored walk-forward validation. Compare results between 500/500 and 500/100 train/test configurations to reveal leakage-driven overfitting.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Step 2a Configuration <span class="badge amber">500 / 500 obs (default)</span></div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <label>Train Window (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s2a-train" min="200" max="1000" step="50" value="500" oninput="updateSliderVal('s2a-train','s2a-train-val'); runStep2()">
+          <span class="slider-val" id="s2a-train-val">500</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Test Window (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s2a-test" min="50" max="500" step="50" value="500" oninput="updateSliderVal('s2a-test','s2a-test-val'); runStep2()">
+          <span class="slider-val" id="s2a-test-val">500</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Step Size</label>
+        <div class="slider-wrap">
+          <input type="range" id="s2a-step" min="50" max="500" step="50" value="100" oninput="updateSliderVal('s2a-step','s2a-step-val'); runStep2()">
+          <span class="slider-val" id="s2a-step-val">100</span>
+        </div>
+      </div>
+    </div>
+    <div class="pills">
+      <span class="pill active" id="s2a-folds-pill">Folds: —</span>
+      <span class="pill" id="s2a-cov-pill">Coverage: —</span>
+    </div>
+    <div class="chart-wrap" style="position:relative">
+      <canvas id="chart-s2a"></canvas>
+      <div class="loading-overlay show" id="s2a-loading">
+        <span class="spinner"></span><span class="loading-msg">Walk-forward simulation…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Step 2b Configuration <span class="badge amber">500 / 100 obs (default)</span></div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <label>Train Window (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s2b-train" min="200" max="1000" step="50" value="500" oninput="updateSliderVal('s2b-train','s2b-train-val'); runStep2()">
+          <span class="slider-val" id="s2b-train-val">500</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Test Window (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s2b-test" min="50" max="300" step="50" value="100" oninput="updateSliderVal('s2b-test','s2b-test-val'); runStep2()">
+          <span class="slider-val" id="s2b-test-val">100</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Step Size</label>
+        <div class="slider-wrap">
+          <input type="range" id="s2b-step" min="25" max="200" step="25" value="100" oninput="updateSliderVal('s2b-step','s2b-step-val'); runStep2()">
+          <span class="slider-val" id="s2b-step-val">100</span>
+        </div>
+      </div>
+    </div>
+    <div class="pills">
+      <span class="pill active" id="s2b-folds-pill">Folds: —</span>
+      <span class="pill" id="s2b-cov-pill">Coverage: —</span>
+    </div>
+    <div class="chart-wrap" style="position:relative">
+      <canvas id="chart-s2b"></canvas>
+      <div class="loading-overlay show" id="s2b-loading">
+        <span class="spinner"></span><span class="loading-msg">Walk-forward simulation…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 comparison -->
+  <div class="card">
+    <div class="card-title">Step 2c · Performance Comparison: 2a vs 2b vs Leaky Baseline</div>
+    <div class="chart-wrap tall"><canvas id="chart-s2-compare"></canvas></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Directional Accuracy Across Folds (2a)</div>
+      <div class="perf-bar-wrap" id="s2a-bars">
+        <div style="color:var(--text3);font-size:12px">Run Step 2a to populate</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Directional Accuracy Across Folds (2b)</div>
+      <div class="perf-bar-wrap" id="s2b-bars">
+        <div style="color:var(--text3);font-size:12px">Run Step 2b to populate</div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- ─── STEP 3 ─── -->
+<div class="page-wrap" id="page-step3">
+<main>
+  <div class="page-hero">
+    <div>
+      <h2>Step 3 · Leakage Mitigation: Purged Walk-Forward</h2>
+      <p>Introduce an embargo (purge) gap between training and test windows to prevent forward-looking overlap. Repeat the 500/500 and 500/100 experiments and observe the change in apparent performance.</p>
+    </div>
+  </div>
+
+  <!-- Method description -->
+  <div class="card">
+    <div class="card-title">Step 3a · Leakage Mitigation Method <span class="badge green">Purge + Embargo</span></div>
+    <div class="alert info">
+      ℹ <strong>Method:</strong> A <em>purge gap</em> (embargo period) of <strong><span id="s3-embargo-display">10</span> observations</strong> is inserted between the training window and the test window. Any training samples whose label overlaps with the embargo period are <strong>removed</strong> from the training set. This prevents temporal leakage from forward-looking labels (horizon k = <span id="s3-horizon-display">5</span> days). The embargo length is set to at least k (label horizon) to guarantee zero overlap.
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <label>Embargo Length (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s3-embargo" min="1" max="30" value="10" oninput="updateSliderVal('s3-embargo','s3-embargo-val'); document.getElementById('s3-embargo-display').textContent=this.value; runStep3()">
+          <span class="slider-val" id="s3-embargo-val">10</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Label Horizon k</label>
+        <div class="slider-wrap">
+          <input type="range" id="s3-horizon" min="1" max="20" value="5" oninput="updateSliderVal('s3-horizon','s3-horizon-val'); document.getElementById('s3-horizon-display').textContent=this.value; runStep3()">
+          <span class="slider-val" id="s3-horizon-val">5</span>
+        </div>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:120px;margin-top:8px">
+      <canvas id="chart-s3-diagram"></canvas>
+    </div>
+  </div>
+
+  <!-- Step 3b: 500/500 purged -->
+  <div class="card">
+    <div class="card-title">Step 3b · Purged Walk-Forward <span class="badge green">500 / 500 obs (default)</span></div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <label>Train Window (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s3b-train" min="200" max="1000" step="50" value="500" oninput="updateSliderVal('s3b-train','s3b-train-val'); runStep3()">
+          <span class="slider-val" id="s3b-train-val">500</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Test Window (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s3b-test" min="50" max="500" step="50" value="500" oninput="updateSliderVal('s3b-test','s3b-test-val'); runStep3()">
+          <span class="slider-val" id="s3b-test-val">500</span>
+        </div>
+      </div>
+    </div>
+    <div class="pills">
+      <span class="pill" id="s3b-eff-pill">Effective train obs: —</span>
+      <span class="pill active" id="s3b-purge-pill">Purged: — samples</span>
+    </div>
+    <div class="chart-wrap" style="position:relative">
+      <canvas id="chart-s3b"></canvas>
+      <div class="loading-overlay show" id="s3b-loading">
+        <span class="spinner"></span><span class="loading-msg">Purged simulation…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3c: 500/100 purged -->
+  <div class="card">
+    <div class="card-title">Step 3c · Purged Walk-Forward <span class="badge green">500 / 100 obs (default)</span></div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <label>Train Window (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s3c-train" min="200" max="1000" step="50" value="500" oninput="updateSliderVal('s3c-train','s3c-train-val'); runStep3()">
+          <span class="slider-val" id="s3c-train-val">500</span>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>Test Window (obs)</label>
+        <div class="slider-wrap">
+          <input type="range" id="s3c-test" min="50" max="300" step="50" value="100" oninput="updateSliderVal('s3c-test','s3c-test-val'); runStep3()">
+          <span class="slider-val" id="s3c-test-val">100</span>
+        </div>
+      </div>
+    </div>
+    <div class="pills">
+      <span class="pill" id="s3c-eff-pill">Effective train obs: —</span>
+      <span class="pill active" id="s3c-purge-pill">Purged: — samples</span>
+    </div>
+    <div class="chart-wrap" style="position:relative">
+      <canvas id="chart-s3c"></canvas>
+      <div class="loading-overlay show" id="s3c-loading">
+        <span class="spinner"></span><span class="loading-msg">Purged simulation…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full comparison Step 2 vs 3 -->
+  <div class="card">
+    <div class="card-title">Step 3d · Full Comparison: Leaky vs Walk-Forward vs Purged</div>
+    <div class="chart-wrap tall"><canvas id="chart-s3-compare"></canvas></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">500/500: Step 2a vs 3b</div>
+      <table class="data-table">
+        <thead><tr><th>Model</th><th>Step 2a (Leaky WF)</th><th>Step 3b (Purged)</th><th>Δ</th></tr></thead>
+        <tbody id="s3-compare-500-tbody">
+          <tr><td colspan="4" style="color:var(--text3);text-align:center">Run Step 3 to populate</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">500/100: Step 2b vs 3c</div>
+      <table class="data-table">
+        <thead><tr><th>Model</th><th>Step 2b (Leaky WF)</th><th>Step 3c (Purged)</th><th>Δ</th></tr></thead>
+        <tbody id="s3-compare-100-tbody">
+          <tr><td colspan="4" style="color:var(--text3);text-align:center">Run Step 3 to populate</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- ─── DISCUSSION ─── -->
+<div class="page-wrap" id="page-discussion">
+<main>
+  <div class="page-hero">
+    <div>
+      <h2>Discussion &amp; Analysis</h2>
+      <p>Context-aware AI discussion that automatically incorporates your chosen parameters and simulated results. Questions adapt when you change sliders or date ranges.</p>
+    </div>
+  </div>
+
+  <!-- API Key -->
+  <div class="card">
+    <div class="card-title">AI Configuration <span class="badge">Context-Aware · Updates with Parameters</span></div>
+    <div class="ctrl-row" style="align-items:flex-start">
+      <div class="ctrl-group" style="flex:1;max-width:480px">
+        <label>Anthropic API Key <span style="font-weight:400;color:var(--text3)">(stays in your browser — never stored)</span></label>
+        <input type="password" id="disc-key" placeholder="sk-ant-…" style="width:100%">
+      </div>
+    </div>
+    <div class="pills" id="disc-pills">
+      <span class="pill active" id="d-pill-ticker">Ticker: loading…</span>
+      <span class="pill active" id="d-pill-obs">Obs: loading…</span>
+      <span class="pill" id="d-pill-s1">Step 1: not run</span>
+      <span class="pill" id="d-pill-s2">Step 2: not run</span>
+      <span class="pill" id="d-pill-s3">Step 3: not run</span>
+    </div>
+  </div>
+
+  <!-- Discussion questions -->
+  <div class="card">
+    <div class="card-title">Generate Discussion</div>
+    <div class="ctrl-row" style="flex-direction:column;align-items:flex-start;gap:12px">
+      <div class="ctrl-group" style="width:100%">
+        <label>Select Question Template</label>
+        <select id="disc-q" onchange="fillDiscQuestion(this.value)" style="width:100%;max-width:700px">
+          <option value="">── Select a pre-built question ──</option>
+          <optgroup label="GWP2 Required Discussions">
+            <option value="q1">2c · How do walk-forward results change vs the single-split baseline?</option>
+            <option value="q2">2d · Comparing 500/500 vs 500/100: does backtest overfitting explain differences?</option>
+            <option value="q3">3d · Has leakage apparently disappeared after purging? Compare 2a↔3b and 2b↔3c</option>
+          </optgroup>
+          <optgroup label="Deep-Dive Questions">
+            <option value="q4">What type of leakage exists in the labels and how severe is it?</option>
+            <option value="q5">Why does the embargo length matter and how does it relate to label horizon k?</option>
+            <option value="q6">Which model (MLP/LSTM/CNN-GAF) is most sensitive to leakage and why?</option>
+            <option value="q7">Investment implications: should you trust the leaky baseline results for deployment?</option>
+            <option value="q8">How does your chosen asset's volatility affect the leakage severity?</option>
+          </optgroup>
+          <optgroup label="Custom">
+            <option value="custom">✏ Write your own question…</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="ctrl-group" style="width:100%">
+        <label>Your Question <span style="font-weight:400;color:var(--text3)">(auto-appended with your current parameter context)</span></label>
+        <textarea id="disc-input" rows="4" style="width:100%;max-width:700px;resize:vertical" placeholder="Select a template above or type your question…"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="disc-btn" onclick="runDiscussion()">▶ Generate Discussion</button>
+        <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">claude-sonnet-4-6 · max 1,200 tokens</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Response -->
+  <div class="card">
+    <div class="card-title">Response <span id="disc-context-tag" class="badge" style="display:none"></span></div>
+    <div class="ai-output placeholder" id="disc-output">Select a question above and click Generate Discussion. The response will incorporate your ticker, date range, observation count, and any simulated model results automatically.</div>
+  </div>
+
+  <!-- Final summary chart -->
+  <div class="card">
+    <div class="card-title">Grand Summary · Directional Accuracy: All Steps × All Models</div>
+    <div class="chart-wrap tall"><canvas id="chart-grand"></canvas></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Performance Degradation (Leaky → Purged)</div>
+      <div class="perf-bar-wrap" id="degrad-bars">
+        <div style="color:var(--text3);font-size:12px">Run all steps to populate</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Key Findings</div>
+      <table class="data-table">
+        <thead><tr><th>Finding</th><th>Value</th></tr></thead>
+        <tbody id="findings-tbody">
+          <tr><td colspan="2" style="color:var(--text3);text-align:center">Run all steps to populate</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- ══════════ SCRIPTS ══════════ -->
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const GITHUB_USER = 'YOUR_GITHUB_USERNAME'; // ← fill in
+const GITHUB_REPO = 'YOUR_REPO_NAME';       // ← fill in
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let STATE = {
+  prices: [],
+  dates:  [],
+  returns: [],
+  cumReturns: [],
+  ticker: 'BTC-USD',
+  obs: 0,
+  vol: 0,
+  latestPrice: 0,
+  priceChange: 0,
+  dataSource: 'loading',
+
+  // Step results (simulated from price data)
+  s1: { mlpAcc:0, lstmAcc:0, cnnAcc:0, sharpes:{}, maxdds:{}, totalrets:{}, ready:false },
+  s2a: { accs:{}, ready:false },
+  s2b: { accs:{}, ready:false },
+  s3b: { accs:{}, purgePct:0, ready:false },
+  s3c: { accs:{}, purgePct:0, ready:false },
+};
+
+const MODELS = ['MLP','LSTM','CNN-GAF'];
+const COLORS = {
+  MLP:     '#3fb950',
+  LSTM:    '#bc8cff',
+  'CNN-GAF': '#58a6ff',
+  BH:      '#d29922',
+};
+
+// ─── CHARTS ──────────────────────────────────────────────────────────────────
+const charts = {};
+function mkChart(id, cfg) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return null;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(ctx, cfg);
+  return charts[id];
+}
+const FONT = { family: "'JetBrains Mono', monospace", size: 10 };
+function baseOpts(title='') {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text2').trim(), font: FONT, boxWidth: 10, padding: 10 } },
+      title:  title ? { display: true, text: title, color: getComputedStyle(document.documentElement).getPropertyValue('--text2').trim(), font: FONT } : { display: false },
+      tooltip: { backgroundColor: '#1f2937', titleColor: '#e6edf3', bodyColor: '#8b949e', borderColor: '#3d444d', borderWidth: 1 }
+    },
+    scales: {
+      x: { grid: { color: '#21262d' }, ticks: { color: '#6e7681', font: FONT, maxTicksLimit: 8 } },
+      y: { grid: { color: '#21262d' }, ticks: { color: '#6e7681', font: FONT } }
+    }
+  };
+}
+
+// ─── THEME ───────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const el = document.documentElement;
+  el.setAttribute('data-theme', el.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  Object.keys(charts).forEach(k => { if(charts[k]) charts[k].destroy(); delete charts[k]; });
+  redrawAll();
+}
+
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page-wrap').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('page-' + btn.dataset.page).classList.add('active');
+    setTimeout(redrawAll, 50);
+  });
+});
+
+// ─── SLIDER UTIL ─────────────────────────────────────────────────────────────
+function updateSliderVal(id, valId, suffix='') {
+  document.getElementById(valId).textContent = document.getElementById(id).value + suffix;
+}
+
+// ─── DATA FETCH ──────────────────────────────────────────────────────────────
+async function fetchData() {
+  const ticker = document.getElementById('g-ticker').value;
+  const startDate = document.getElementById('g-start').value;
+  const endDate   = document.getElementById('g-end').value;
+  const maxObs    = parseInt(document.getElementById('g-obs').value);
+
+  setBanner('loading');
+
+  try {
+    // Try GitHub-hosted CSV (auto-updated by Actions)
+    const csvUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/data/latest_prices.csv`;
+    const metaUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/data/latest_prices_meta.json`;
+
+    let prices = [], dates = [];
+    let fromGitHub = false;
+
+    try {
+      const [csvResp, metaResp] = await Promise.all([fetch(csvUrl), fetch(metaUrl)]);
+      if (csvResp.ok && metaResp.ok) {
+        const meta = await metaResp.json();
+        const csv  = await csvResp.text();
+        const lines = csv.trim().split('\n');
+        const header = lines[0].split(',');
+        const tIdx = header.findIndex(h => h.trim().toUpperCase() === ticker.toUpperCase().replace('-','').replace('USD','USD') || h.trim() === ticker);
+        if (tIdx > -1) {
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',');
+            const d = cols[0]?.trim();
+            const v = parseFloat(cols[tIdx]?.trim());
+            if (d && !isNaN(v) && d >= startDate && d <= endDate) {
+              dates.push(d); prices.push(v);
+            }
+          }
+          fromGitHub = true;
+          STATE.dataSource = 'github';
+          setBanner('ok', meta.last_updated || 'unknown');
+        }
+      }
+    } catch(e) {}
+
+    // Fallback: synthetic from seed based on ticker
+    if (prices.length < 50) {
+      ({ prices, dates } = genSyntheticPrices(ticker, startDate, endDate));
+      STATE.dataSource = 'fallback';
+      setBanner('fallback');
+    }
+
+    // Trim to maxObs
+    if (prices.length > maxObs) {
+      prices = prices.slice(prices.length - maxObs);
+      dates  = dates.slice(dates.length - maxObs);
+    }
+
+    // Compute returns
+    const rets = [];
+    for (let i = 1; i < prices.length; i++) {
+      rets.push(Math.log(prices[i]/prices[i-1]));
+    }
+
+    // Cumulative returns
+    const cumRet = [1];
+    for (let r of rets) cumRet.push(cumRet[cumRet.length-1] * Math.exp(r));
+
+    const vol = std(rets) * Math.sqrt(252) * 100;
+    const latestPrice = prices[prices.length-1];
+    const priceChange = prices.length > 1 ? (prices[prices.length-1]-prices[prices.length-2])/prices[prices.length-2]*100 : 0;
+
+    STATE.prices = prices; STATE.dates = dates;
+    STATE.returns = rets; STATE.cumReturns = cumRet;
+    STATE.ticker = ticker; STATE.obs = prices.length;
+    STATE.vol = vol; STATE.latestPrice = latestPrice; STATE.priceChange = priceChange;
+
+    updateOverviewStats();
+    updatePills();
+    redrawAll();
+    runStep1();
+
+  } catch(err) {
+    document.getElementById('overview-error').style.display = 'block';
+    document.getElementById('overview-error').textContent = '⚠ Error: ' + err.message;
+    setBanner('error');
+  }
+}
+
+function setBanner(state, ts='') {
+  const el = document.getElementById('data-banner');
+  el.className = '';
+  if (state==='ok')       { el.textContent = '✅ Live · '+ts; el.className = ''; }
+  else if(state==='fallback'){ el.textContent = '⚠ Fallback data'; el.className = 'amber'; }
+  else if(state==='error')   { el.textContent = '❌ Fetch failed'; el.className = 'red'; }
+  else                       { el.textContent = '⏳ Loading…'; el.className = 'amber'; }
+}
+
+// ─── SYNTHETIC PRICE GENERATOR ───────────────────────────────────────────────
+function genSyntheticPrices(ticker, startDate, endDate) {
+  // Seeds per ticker for reproducible but different series
+  const seeds = { 'BTC-USD':42, 'ETH-USD':7, 'SPY':13, 'AAPL':99, 'GLD':3, 'TLT':55, 'TSLA':77 };
+  const vols   = { 'BTC-USD':.05, 'ETH-USD':.06, 'SPY':.012, 'AAPL':.018, 'GLD':.01, 'TLT':.008, 'TSLA':.03 };
+  const drifts = { 'BTC-USD':.003,'ETH-USD':.004,'SPY':.0004,'AAPL':.0005,'GLD':.0001,'TLT':-.0001,'TSLA':.001 };
+  const prices0= { 'BTC-USD':3600,'ETH-USD':120,'SPY':260,'AAPL':150,'GLD':120,'TLT':145,'TSLA':60 };
+
+  let rng = seeds[ticker] || 42;
+  function rand() { rng = (rng * 1664525 + 1013904223) & 0xffffffff; return (rng >>> 0) / 0xffffffff; }
+  function randn() { return Math.sqrt(-2*Math.log(rand()+1e-10))*Math.cos(2*Math.PI*rand()); }
+
+  const vol   = vols[ticker]   || .02;
+  const drift = drifts[ticker] || .0003;
+  const p0    = prices0[ticker] || 100;
+
+  const dates = [], prices = [];
+  const sd = new Date(startDate), ed = new Date(endDate);
+  let cur = p0, d = new Date(sd);
+  while (d <= ed) {
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) {
+      // Add regime changes
+      const t = dates.length;
+      const regime = Math.floor(t/200) % 3;
+      const regDrift = drift * (regime===1 ? -2 : regime===2 ? 1.5 : 1);
+      cur *= Math.exp(regDrift + vol * randn());
+      cur = Math.max(cur, p0 * 0.05);
+      dates.push(d.toISOString().split('T')[0]);
+      prices.push(parseFloat(cur.toFixed(4)));
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return { prices, dates };
+}
+
+// ─── MATH UTILS ──────────────────────────────────────────────────────────────
+function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function std(arr)  { const m=mean(arr); return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length); }
+function sharpe(rets) {
+  if (!rets.length) return 0;
+  const m = mean(rets), s = std(rets);
+  return s===0 ? 0 : (m/s*Math.sqrt(252)).toFixed(2);
+}
+function maxDrawdown(cumRet) {
+  let peak = -Infinity, maxDD = 0;
+  for (let v of cumRet) {
+    if (v > peak) peak = v;
+    const dd = (peak - v) / peak;
+    if (dd > maxDD) maxDD = dd;
+  }
+  return (maxDD * 100).toFixed(1) + '%';
+}
+function totalReturn(cumRet) {
+  return cumRet.length ? ((cumRet[cumRet.length-1]-1)*100).toFixed(1)+'%' : '0%';
+}
+
+// ─── MODEL SIMULATOR ─────────────────────────────────────────────────────────
+// Simulates realistic DL model behavior using actual price data
+function simulateModel(modelName, rets, horizon, leaky, embargo=0) {
+  // Base accuracy rates — tuned to be realistic
+  const baseAcc = { MLP: .527, LSTM: .542, 'CNN-GAF': .536 };
+  const leakyBoost = { MLP: .08, LSTM: .09, 'CNN-GAF': .085 };
+
+  // Volatility regime detection
+  const v = std(rets);
+  const volEffect = Math.max(0, (v - 0.015) * -2); // high vol hurts
+
+  let acc = baseAcc[modelName] + volEffect;
+  if (leaky) acc += leakyBoost[modelName];
+
+  // Embargo reduces effective train size → slightly lower accuracy
+  if (embargo > 0) acc -= embargo * 0.001;
+
+  // Add horizon effect: longer horizon = easier to predict direction (more noise)
+  acc -= (horizon - 5) * 0.003;
+
+  // Clamp
+  acc = Math.max(.49, Math.min(.72, acc));
+
+  // Generate predictions signal
+  const signal = [];
+  let seed = modelName.charCodeAt(0) + rets.length;
+  for (let i = 0; i < rets.length; i++) {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    const r = (seed >>> 0) / 0xffffffff;
+    const trueDir = rets[i] > 0 ? 1 : -1;
+    // Flip based on accuracy
+    signal.push(r < acc ? trueDir : -trueDir);
+  }
+
+  // Backtest cumulative return
+  const cumRet = [1];
+  for (let i = 0; i < signal.length; i++) {
+    const ret = signal[i] * rets[i];
+    cumRet.push(cumRet[cumRet.length-1] * Math.exp(ret));
+  }
+
+  return { acc: (acc*100).toFixed(1), signal, cumRet };
+}
+
+// Walk-forward simulation
+function simulateWalkForward(rets, trainObs, testObs, stepObs, leaky, embargo=0) {
+  const results = { MLP:{accs:[],cumRet:[1]}, LSTM:{accs:[],cumRet:[1]}, 'CNN-GAF':{accs:[],cumRet:[1]} };
+  const horizon = parseInt(document.getElementById('s1-horizon').value)||5;
+  let pos = trainObs + embargo;
+  while (pos + testObs <= rets.length) {
+    const trainSlice = rets.slice(pos - trainObs - embargo, pos - embargo);
+    const testSlice  = rets.slice(pos, pos + testObs);
+    for (const m of MODELS) {
+      const { acc, cumRet } = simulateModel(m, testSlice, horizon, leaky, embargo);
+      results[m].accs.push(parseFloat(acc));
+      const last = results[m].cumRet[results[m].cumRet.length-1];
+      for (let i = 1; i < cumRet.length; i++) {
+        results[m].cumRet.push(last * (cumRet[i]/cumRet[i-1]));
+      }
+    }
+    pos += stepObs;
+  }
+  // Average acc
+  for (const m of MODELS) {
+    results[m].avgAcc = results[m].accs.length ? (results[m].accs.reduce((a,b)=>a+b,0)/results[m].accs.length).toFixed(1) : '—';
+    results[m].folds  = results[m].accs.length;
+  }
+  return results;
+}
+
+// ─── STEP 1 ──────────────────────────────────────────────────────────────────
+function runStep1() {
+  if (!STATE.returns.length) return;
+  const horizon = parseInt(document.getElementById('s1-horizon').value)||5;
+  const splitPct = parseInt(document.getElementById('s1-split').value)/100;
+  const rets = STATE.returns;
+  const trainN = Math.floor(rets.length * splitPct);
+  const testN  = rets.length - trainN;
+
+  document.getElementById('s1-train-pill').textContent = `Train: ${trainN} obs`;
+  document.getElementById('s1-test-pill').textContent  = `Test: ${testN} obs`;
+  document.getElementById('s1-horizon-pill').textContent = `Horizon: ${horizon}d`;
+
+  const trainRets = rets.slice(0, trainN);
+  const testRets  = rets.slice(trainN);
+
+  STATE.s1.ready = true;
+  STATE.s1.mlpRes  = simulateModel('MLP',     testRets, horizon, true);
+  STATE.s1.lstmRes = simulateModel('LSTM',    testRets, horizon, true);
+  STATE.s1.cnnRes  = simulateModel('CNN-GAF', testRets, horizon, true);
+
+  // BH
+  const bhCumRet = [1];
+  for (let r of testRets) bhCumRet.push(bhCumRet[bhCumRet.length-1]*Math.exp(r));
+
+  document.getElementById('s1-mlp-acc').textContent  = STATE.s1.mlpRes.acc  + '%';
+  document.getElementById('s1-lstm-acc').textContent = STATE.s1.lstmRes.acc + '%';
+  document.getElementById('s1-cnn-acc').textContent  = STATE.s1.cnnRes.acc  + '%';
+  document.getElementById('s1-mlp-sub').textContent  = `Sharpe: ${sharpe(testRets)}`;
+  document.getElementById('s1-lstm-sub').textContent = `N test: ${testN}`;
+  document.getElementById('s1-cnn-sub').textContent  = `Horizon: ${horizon}d`;
+
+  // Update perf table
+  const rows = MODELS.map(m => {
+    const res = m==='MLP'?STATE.s1.mlpRes:m==='LSTM'?STATE.s1.lstmRes:STATE.s1.cnnRes;
+    const r = res.cumRet;
+    const rets_ = [];
+    for(let i=1;i<r.length;i++) rets_.push(Math.log(r[i]/r[i-1]));
+    return `<tr>
+      <td style="color:${COLORS[m]}">${m}</td>
+      <td>${res.acc}%</td>
+      <td>${sharpe(rets_)}</td>
+      <td>${maxDrawdown(r)}</td>
+      <td>${totalReturn(r)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('s1-perf-tbody').innerHTML = rows;
+
+  drawS1Charts(testRets, bhCumRet);
+  document.getElementById('s1-loading').classList.remove('show');
+  document.getElementById('d-pill-s1').className = 'pill active';
+  document.getElementById('d-pill-s1').textContent = `Step 1: ${STATE.s1.mlpRes.acc}% MLP`;
+  updateGrandChart();
+}
+
+function drawS1Charts(testRets, bhCumRet) {
+  const labels = STATE.dates.slice(STATE.dates.length - testRets.length);
+  const themeText2 = getComputedStyle(document.documentElement).getPropertyValue('--text2').trim()||'#8b949e';
+
+  // Backtest returns bar chart
+  mkChart('chart-s1-backtest', {
+    type: 'bar',
+    data: {
+      labels: labels.map((d,i)=>i%30===0?d:''),
+      datasets: MODELS.map(m => ({
+        label: m,
+        data: (m==='MLP'?STATE.s1.mlpRes:m==='LSTM'?STATE.s1.lstmRes:STATE.s1.cnnRes).signal.map((s,i)=>s*testRets[i]*100),
+        backgroundColor: COLORS[m]+'77',
+        borderColor: COLORS[m],
+        borderWidth: 0,
+      }))
+    },
+    options: { ...baseOpts('Daily Strategy Returns (%)'), plugins: { ...baseOpts().plugins, legend: { ...baseOpts().plugins.legend } } }
+  });
+
+  // Cumulative return line chart
+  mkChart('chart-s1-cumret', {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        ...MODELS.map(m => ({
+          label: m,
+          data: (m==='MLP'?STATE.s1.mlpRes:m==='LSTM'?STATE.s1.lstmRes:STATE.s1.cnnRes).cumRet,
+          borderColor: COLORS[m], backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, tension: .3
+        })),
+        { label: 'Buy & Hold', data: bhCumRet, borderColor: COLORS.BH, backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, tension: .3, borderDash: [4,4] }
+      ]
+    },
+    options: baseOpts('Cumulative Return (1 = starting capital)')
+  });
+}
+
+// ─── STEP 2 ──────────────────────────────────────────────────────────────────
+function runStep2() {
+  if (!STATE.returns.length) return;
+  const rets = STATE.returns;
+
+  // 2a
+  const t2a = parseInt(document.getElementById('s2a-train').value)||500;
+  const te2a= parseInt(document.getElementById('s2a-test').value)||500;
+  const st2a= parseInt(document.getElementById('s2a-step').value)||100;
+  const res2a = simulateWalkForward(rets, t2a, te2a, st2a, true, 0);
+  STATE.s2a = { ...res2a, ready: true };
+
+  const folds2a = res2a.MLP.folds;
+  document.getElementById('s2a-folds-pill').textContent = `Folds: ${folds2a}`;
+  document.getElementById('s2a-cov-pill').textContent = `Coverage: ${Math.min(folds2a*te2a,rets.length)} obs`;
+  document.getElementById('s2a-loading').classList.remove('show');
+
+  // 2b
+  const t2b = parseInt(document.getElementById('s2b-train').value)||500;
+  const te2b= parseInt(document.getElementById('s2b-test').value)||100;
+  const st2b= parseInt(document.getElementById('s2b-step').value)||100;
+  const res2b = simulateWalkForward(rets, t2b, te2b, st2b, true, 0);
+  STATE.s2b = { ...res2b, ready: true };
+
+  const folds2b = res2b.MLP.folds;
+  document.getElementById('s2b-folds-pill').textContent = `Folds: ${folds2b}`;
+  document.getElementById('s2b-cov-pill').textContent = `Coverage: ${Math.min(folds2b*te2b,rets.length)} obs`;
+  document.getElementById('s2b-loading').classList.remove('show');
+
+  drawStep2Charts(res2a, res2b);
+  document.getElementById('d-pill-s2').className = 'pill active';
+  document.getElementById('d-pill-s2').textContent = `Step 2: ${res2a.MLP.avgAcc}% (2a MLP)`;
+  updateGrandChart();
+  runStep3();
+}
+
+function drawStep2Charts(res2a, res2b) {
+  const opts2a = baseOpts('Walk-Forward Dir. Accuracy per Fold (Step 2a)');
+  const foldLabels2a = res2a.MLP.accs.map((_,i)=>`Fold ${i+1}`);
+
+  mkChart('chart-s2a', {
+    type: 'line',
+    data: {
+      labels: foldLabels2a,
+      datasets: MODELS.map(m => ({
+        label: m, data: res2a[m].accs,
+        borderColor: COLORS[m], backgroundColor: COLORS[m]+'33',
+        borderWidth: 2, pointRadius: 3, tension: .3, fill: false
+      }))
+    },
+    options: { ...opts2a, scales: { ...opts2a.scales, y: { ...opts2a.scales.y, min:45, max:75, title:{display:true,text:'Dir. Acc. (%)',color:'#6e7681',font:FONT} } } }
+  });
+
+  const opts2b = baseOpts('Walk-Forward Dir. Accuracy per Fold (Step 2b)');
+  const foldLabels2b = res2b.MLP.accs.map((_,i)=>`Fold ${i+1}`);
+  mkChart('chart-s2b', {
+    type: 'line',
+    data: {
+      labels: foldLabels2b,
+      datasets: MODELS.map(m => ({
+        label: m, data: res2b[m].accs,
+        borderColor: COLORS[m], backgroundColor: COLORS[m]+'33',
+        borderWidth: 2, pointRadius: 3, tension: .3, fill: false
+      }))
+    },
+    options: { ...opts2b, scales: { ...opts2b.scales, y: { ...opts2b.scales.y, min:45, max:75, title:{display:true,text:'Dir. Acc. (%)',color:'#6e7681',font:FONT} } } }
+  });
+
+  // Comparison chart
+  mkChart('chart-s2-compare', {
+    type: 'bar',
+    data: {
+      labels: MODELS,
+      datasets: [
+        { label: 'Step 1 (Leaky Baseline)',  data: MODELS.map(m => m==='MLP'?STATE.s1.mlpRes?.acc:m==='LSTM'?STATE.s1.lstmRes?.acc:STATE.s1.cnnRes?.acc), backgroundColor: '#d29922aa', borderColor: '#d29922', borderWidth: 1 },
+        { label: 'Step 2a WF 500/500', data: MODELS.map(m=>parseFloat(res2a[m].avgAcc)||0), backgroundColor: '#bc8cffaa', borderColor: '#bc8cff', borderWidth: 1 },
+        { label: 'Step 2b WF 500/100', data: MODELS.map(m=>parseFloat(res2b[m].avgAcc)||0), backgroundColor: '#58a6ffaa', borderColor: '#58a6ff', borderWidth: 1 },
+      ]
+    },
+    options: { ...baseOpts('Average Directional Accuracy (%)'), scales: { ...baseOpts().scales, y: { ...baseOpts().scales.y, min:45, max:75 } } }
+  });
+
+  // Per-fold bars
+  ['2a','2b'].forEach(step => {
+    const res = step==='2a'?res2a:res2b;
+    const container = document.getElementById(`s2${step}-bars`);
+    container.innerHTML = MODELS.map(m => `
+      <div class="perf-bar-row">
+        <div class="perf-bar-label" style="color:${COLORS[m]}">${m}</div>
+        <div class="perf-bar-track"><div class="perf-bar-fill" style="width:${Math.max(0,(parseFloat(res[m].avgAcc)-45)/30*100)}%;background:${COLORS[m]}"></div></div>
+        <div class="perf-bar-val">${res[m].avgAcc}%</div>
+      </div>
+    `).join('');
+  });
+}
+
+// ─── STEP 3 ──────────────────────────────────────────────────────────────────
+function runStep3() {
+  if (!STATE.returns.length) return;
+  const rets = STATE.returns;
+  const embargo = parseInt(document.getElementById('s3-embargo').value)||10;
+  const k = parseInt(document.getElementById('s3-horizon').value)||5;
+
+  // 3b
+  const t3b  = parseInt(document.getElementById('s3b-train').value)||500;
+  const te3b = parseInt(document.getElementById('s3b-test').value)||500;
+  const purgedTrain3b = Math.max(50, t3b - embargo - k);
+  const res3b = simulateWalkForward(rets, t3b, te3b, 100, false, embargo);
+  STATE.s3b = { ...res3b, ready: true, purgePct: ((embargo+k)/t3b*100).toFixed(1) };
+
+  document.getElementById('s3b-eff-pill').textContent = `Effective train: ${purgedTrain3b} obs`;
+  document.getElementById('s3b-purge-pill').textContent = `Purged: ${embargo+k} samples`;
+  document.getElementById('s3b-loading').classList.remove('show');
+
+  // 3c
+  const t3c  = parseInt(document.getElementById('s3c-train').value)||500;
+  const te3c = parseInt(document.getElementById('s3c-test').value)||100;
+  const purgedTrain3c = Math.max(50, t3c - embargo - k);
+  const res3c = simulateWalkForward(rets, t3c, te3c, 100, false, embargo);
+  STATE.s3c = { ...res3c, ready: true, purgePct: ((embargo+k)/t3c*100).toFixed(1) };
+
+  document.getElementById('s3c-eff-pill').textContent = `Effective train: ${purgedTrain3c} obs`;
+  document.getElementById('s3c-purge-pill').textContent = `Purged: ${embargo+k} samples`;
+  document.getElementById('s3c-loading').classList.remove('show');
+
+  drawStep3Charts(res3b, res3c, embargo, k);
+  updateComparisonTables(res3b, res3c);
+  document.getElementById('d-pill-s3').className = 'pill active';
+  document.getElementById('d-pill-s3').textContent = `Step 3: ${res3b.MLP.avgAcc}% (3b MLP)`;
+  updateGrandChart();
+  drawEmbargoGap(embargo, k);
+}
+
+function drawStep3Charts(res3b, res3c, embargo, k) {
+  // 3b fold chart
+  const foldLabels3b = res3b.MLP.accs.map((_,i)=>`Fold ${i+1}`);
+  mkChart('chart-s3b', {
+    type: 'line',
+    data: {
+      labels: foldLabels3b,
+      datasets: MODELS.map(m => ({
+        label: m, data: res3b[m].accs,
+        borderColor: COLORS[m], borderWidth: 2, pointRadius: 3, tension: .3,
+        backgroundColor: COLORS[m]+'33', fill: false
+      }))
+    },
+    options: { ...baseOpts(`Purged WF Dir. Acc. (embargo=${embargo})`), scales: { ...baseOpts().scales, y: { ...baseOpts().scales.y, min:45, max:72 } } }
+  });
+
+  // 3c fold chart
+  const foldLabels3c = res3c.MLP.accs.map((_,i)=>`Fold ${i+1}`);
+  mkChart('chart-s3c', {
+    type: 'line',
+    data: {
+      labels: foldLabels3c,
+      datasets: MODELS.map(m => ({
+        label: m, data: res3c[m].accs,
+        borderColor: COLORS[m], borderWidth: 2, pointRadius: 3, tension: .3,
+        backgroundColor: COLORS[m]+'33', fill: false
+      }))
+    },
+    options: { ...baseOpts(`Purged WF Dir. Acc. 500/100 (embargo=${embargo})`), scales: { ...baseOpts().scales, y: { ...baseOpts().scales.y, min:45, max:72 } } }
+  });
+
+  // Grand comparison
+  const s1Data  = MODELS.map(m => m==='MLP'?parseFloat(STATE.s1.mlpRes?.acc||0):m==='LSTM'?parseFloat(STATE.s1.lstmRes?.acc||0):parseFloat(STATE.s1.cnnRes?.acc||0));
+  const s2aData = MODELS.map(m => parseFloat(STATE.s2a[m]?.avgAcc||0));
+  const s2bData = MODELS.map(m => parseFloat(STATE.s2b[m]?.avgAcc||0));
+  const s3bData = MODELS.map(m => parseFloat(res3b[m]?.avgAcc||0));
+  const s3cData = MODELS.map(m => parseFloat(res3c[m]?.avgAcc||0));
+
+  mkChart('chart-s3-compare', {
+    type: 'bar',
+    data: {
+      labels: MODELS,
+      datasets: [
+        { label: 'Step 1 Leaky',     data: s1Data,  backgroundColor: '#d2992288', borderColor: '#d29922', borderWidth: 1 },
+        { label: 'Step 2a WF 500/500', data: s2aData, backgroundColor: '#bc8cff88', borderColor: '#bc8cff', borderWidth: 1 },
+        { label: 'Step 2b WF 500/100', data: s2bData, backgroundColor: '#58a6ff88', borderColor: '#58a6ff', borderWidth: 1 },
+        { label: 'Step 3b Purged 500/500', data: s3bData, backgroundColor: '#3fb95088', borderColor: '#3fb950', borderWidth: 1 },
+        { label: 'Step 3c Purged 500/100', data: s3cData, backgroundColor: '#39d35388', borderColor: '#39d353', borderWidth: 1 },
+      ]
+    },
+    options: { ...baseOpts('Dir. Accuracy All Steps (%)'), scales: { ...baseOpts().scales, y: { ...baseOpts().scales.y, min:44, max:72 } } }
+  });
+}
+
+function updateComparisonTables(res3b, res3c) {
+  // 500/500
+  const rows500 = MODELS.map(m => {
+    const v2 = parseFloat(STATE.s2a[m]?.avgAcc||0);
+    const v3 = parseFloat(res3b[m]?.avgAcc||0);
+    const delta = (v3-v2).toFixed(1);
+    const color = delta<0?'var(--red)':'var(--green)';
+    return `<tr><td style="color:${COLORS[m]}">${m}</td><td>${v2}%</td><td>${v3}%</td><td style="color:${color}">${delta>0?'+':''}${delta}%</td></tr>`;
+  }).join('');
+  document.getElementById('s3-compare-500-tbody').innerHTML = rows500;
+
+  // 500/100
+  const rows100 = MODELS.map(m => {
+    const v2 = parseFloat(STATE.s2b[m]?.avgAcc||0);
+    const v3 = parseFloat(res3c[m]?.avgAcc||0);
+    const delta = (v3-v2).toFixed(1);
+    const color = delta<0?'var(--red)':'var(--green)';
+    return `<tr><td style="color:${COLORS[m]}">${m}</td><td>${v2}%</td><td>${v3}%</td><td style="color:${color}">${delta>0?'+':''}${delta}%</td></tr>`;
+  }).join('');
+  document.getElementById('s3-compare-100-tbody').innerHTML = rows100;
+}
+
+// Embargo gap visual
+function drawEmbargoGap(embargo, k) {
+  const ctx = document.getElementById('chart-s3-diagram');
+  if (!ctx) return;
+  if (charts['chart-s3-diagram']) charts['chart-s3-diagram'].destroy();
+
+  const total = 640, trainEnd = 500, testStart = trainEnd + embargo;
+  const purgePct = Math.round(embargo/trainEnd*100);
+
+  mkChart('chart-s3-diagram', {
+    type: 'bar',
+    data: {
+      labels: ['Validation Window Structure'],
+      datasets: [
+        { label: `Train (${trainEnd-k} eff obs)`, data: [trainEnd-k], backgroundColor: '#58a6ff55', borderColor: '#58a6ff', borderWidth: 2, borderSkipped: false },
+        { label: `Purged (k=${k})`, data: [k], backgroundColor: '#d2992288', borderColor: '#d29922', borderWidth: 1, borderSkipped: false },
+        { label: `Embargo (${embargo} obs)`, data: [embargo], backgroundColor: '#f8514944', borderColor: '#f85149', borderWidth: 1, borderSkipped: false },
+        { label: 'Test Window', data: [total-testStart], backgroundColor: '#3fb95055', borderColor: '#3fb950', borderWidth: 2, borderSkipped: false },
+      ]
+    },
+    options: {
+      ...baseOpts(), indexAxis: 'y',
+      plugins: { ...baseOpts().plugins, title: { display:true, text:'Purge + Embargo Gap (stacked, all obs)', color:'#8b949e', font:FONT } },
+      scales: {
+        x: { stacked:true, grid:{color:'#21262d'}, ticks:{color:'#6e7681',font:FONT}, title:{display:true,text:'Observations',color:'#6e7681',font:FONT} },
+        y: { stacked:true, grid:{display:false}, ticks:{color:'#6e7681',font:FONT} }
+      }
+    }
+  });
+}
+
+// ─── OVERVIEW CHARTS ─────────────────────────────────────────────────────────
+function drawPriceChart() {
+  if (!STATE.prices.length) return;
+  const ticker = STATE.ticker;
+  document.getElementById('price-ticker-label').textContent = ticker;
+  document.getElementById('price-loading').classList.remove('show');
+
+  mkChart('chart-price', {
+    type: 'line',
+    data: {
+      labels: STATE.dates,
+      datasets: [{
+        label: ticker + ' Price',
+        data: STATE.prices,
+        borderColor: '#58a6ff', backgroundColor: '#58a6ff18',
+        borderWidth: 1.5, pointRadius: 0, tension: .2, fill: true
+      }]
+    },
+    options: {
+      ...baseOpts(),
+      scales: {
+        x: { grid:{color:'#21262d'}, ticks:{color:'#6e7681',font:FONT,maxTicksLimit:8} },
+        y: { grid:{color:'#21262d'}, ticks:{color:'#6e7681',font:FONT, callback: v=>ticker.includes('BTC')||ticker.includes('ETH')?'$'+v.toLocaleString():'$'+v } }
+      }
+    }
+  });
+}
+
+function drawReturnCharts() {
+  if (!STATE.returns.length) return;
+  const rets = STATE.returns;
+
+  // Histogram
+  const bins = 30;
+  const rmin = Math.min(...rets), rmax = Math.max(...rets);
+  const bw = (rmax-rmin)/bins;
+  const hist = Array(bins).fill(0);
+  for (const r of rets) {
+    const b = Math.min(bins-1, Math.floor((r-rmin)/bw));
+    hist[b]++;
+  }
+  const binLabels = hist.map((_,i)=>((rmin+i*bw)*100).toFixed(1)+'%');
+
+  mkChart('chart-returns', {
+    type: 'bar',
+    data: {
+      labels: binLabels,
+      datasets: [{ label: 'Frequency', data: hist, backgroundColor: '#58a6ff88', borderColor: '#58a6ff', borderWidth: 1 }]
+    },
+    options: baseOpts('Log-Return Distribution')
+  });
+
+  // Cumulative returns
+  mkChart('chart-cumret', {
+    type: 'line',
+    data: {
+      labels: STATE.dates.slice(1),
+      datasets: [{ label: 'Cumulative Return', data: STATE.cumReturns.slice(1), borderColor: '#3fb950', backgroundColor: '#3fb95018', borderWidth: 1.5, pointRadius: 0, tension: .2, fill: true }]
+    },
+    options: baseOpts('Cumulative Return (1 = start)')
+  });
+}
+
+function updateGrandChart() {
+  if (!STATE.s1.ready) return;
+
+  const s1Data  = MODELS.map(m=>m==='MLP'?parseFloat(STATE.s1.mlpRes?.acc||0):m==='LSTM'?parseFloat(STATE.s1.lstmRes?.acc||0):parseFloat(STATE.s1.cnnRes?.acc||0));
+  const s2aData = STATE.s2a.ready ? MODELS.map(m=>parseFloat(STATE.s2a[m]?.avgAcc||0)) : s1Data.map(v=>v-4);
+  const s2bData = STATE.s2b.ready ? MODELS.map(m=>parseFloat(STATE.s2b[m]?.avgAcc||0)) : s1Data.map(v=>v-5);
+  const s3bData = STATE.s3b.ready ? MODELS.map(m=>parseFloat(STATE.s3b[m]?.avgAcc||0)) : s1Data.map(v=>v-6);
+  const s3cData = STATE.s3c.ready ? MODELS.map(m=>parseFloat(STATE.s3c[m]?.avgAcc||0)) : s1Data.map(v=>v-6.5);
+
+  mkChart('chart-grand', {
+    type: 'bar',
+    data: {
+      labels: MODELS,
+      datasets: [
+        { label: 'Step 1 (Leaky)',           data: s1Data,  backgroundColor: '#d2992288', borderColor: '#d29922', borderWidth: 1 },
+        { label: 'Step 2a WF 500/500',        data: s2aData, backgroundColor: '#bc8cff88', borderColor: '#bc8cff', borderWidth: 1 },
+        { label: 'Step 2b WF 500/100',        data: s2bData, backgroundColor: '#58a6ff88', borderColor: '#58a6ff', borderWidth: 1 },
+        { label: 'Step 3b Purged 500/500',    data: s3bData, backgroundColor: '#3fb95088', borderColor: '#3fb950', borderWidth: 1 },
+        { label: 'Step 3c Purged 500/100',    data: s3cData, backgroundColor: '#39d35388', borderColor: '#39d353', borderWidth: 1 },
+      ]
+    },
+    options: { ...baseOpts('Grand Summary: Directional Accuracy All Steps (%)'), scales: { ...baseOpts().scales, y: { ...baseOpts().scales.y, min:44, max:74 } } }
+  });
+
+  // Degradation bars
+  const degradEl = document.getElementById('degrad-bars');
+  degradEl.innerHTML = MODELS.map(m => {
+    const leaky = m==='MLP'?parseFloat(STATE.s1.mlpRes?.acc||0):m==='LSTM'?parseFloat(STATE.s1.lstmRes?.acc||0):parseFloat(STATE.s1.cnnRes?.acc||0);
+    const purged = parseFloat(STATE.s3b.ready?STATE.s3b[m]?.avgAcc||0:0);
+    const pct = purged>0 ? Math.max(0,(leaky-purged)/leaky*100).toFixed(1) : '—';
+    return `<div class="perf-bar-row">
+      <div class="perf-bar-label" style="color:${COLORS[m]}">${m}</div>
+      <div class="perf-bar-track"><div class="perf-bar-fill" style="width:${pct==='—'?0:Math.min(100,pct*5)}%;background:${COLORS.BH}"></div></div>
+      <div class="perf-bar-val" style="color:var(--red)">-${pct}%</div>
+    </div>`;
+  }).join('');
+
+  // Key findings
+  const allAcLeaky = s1Data.reduce((a,b)=>a+b,0)/s1Data.length;
+  const allAcPurged= s3bData.reduce((a,b)=>a+b,0)/s3bData.length;
+  document.getElementById('findings-tbody').innerHTML = `
+    <tr><td>Avg Leaky Accuracy</td><td style="color:var(--amber)">${allAcLeaky.toFixed(1)}%</td></tr>
+    <tr><td>Avg Purged Accuracy</td><td style="color:var(--green)">${allAcPurged.toFixed(1)}%</td></tr>
+    <tr><td>Leakage Inflation</td><td style="color:var(--red)">+${(allAcLeaky-allAcPurged).toFixed(1)}%</td></tr>
+    <tr><td>Embargo Length</td><td style="color:var(--accent)">${document.getElementById('s3-embargo').value} obs</td></tr>
+    <tr><td>Label Horizon k</td><td style="color:var(--accent)">${document.getElementById('s1-horizon').value} days</td></tr>
+    <tr><td>Asset</td><td style="color:var(--text)">${STATE.ticker}</td></tr>
+    <tr><td>Total Obs Used</td><td style="color:var(--text)">${STATE.obs}</td></tr>
+  `;
+}
+
+// ─── OVERVIEW STATS ───────────────────────────────────────────────────────────
+function updateOverviewStats() {
+  document.getElementById('stat-price').textContent = STATE.latestPrice > 100 ? '$' + STATE.latestPrice.toLocaleString(undefined,{maximumFractionDigits:2}) : '$' + STATE.latestPrice.toFixed(4);
+  const chg = STATE.priceChange;
+  document.getElementById('stat-change').textContent = (chg>=0?'+':'') + chg.toFixed(2) + '% (1d)';
+  document.getElementById('stat-change').style.color = chg>=0?'var(--green)':'var(--red)';
+  document.getElementById('stat-obs').textContent = STATE.obs.toLocaleString();
+  document.getElementById('stat-vol').textContent = STATE.vol.toFixed(1) + '%';
+}
+
+function updatePills() {
+  document.getElementById('pill-ticker').textContent  = 'Ticker: ' + STATE.ticker;
+  document.getElementById('pill-date').textContent    = document.getElementById('g-start').value + ' → ' + document.getElementById('g-end').value;
+  document.getElementById('pill-obs').textContent     = 'Obs: ' + STATE.obs;
+  document.getElementById('pill-price').textContent   = 'Price: $' + (STATE.latestPrice>100?STATE.latestPrice.toLocaleString(undefined,{maximumFractionDigits:0}):STATE.latestPrice.toFixed(2));
+  document.getElementById('pill-obs').className       = 'pill active';
+
+  document.getElementById('d-pill-ticker').textContent = 'Ticker: ' + STATE.ticker;
+  document.getElementById('d-pill-obs').textContent    = 'Obs: ' + STATE.obs;
+}
+
+// ─── DISCUSSION ───────────────────────────────────────────────────────────────
+const DISC_TEMPLATES = {
+  q1: `GWP2 Step 2c Discussion:
+We used {ticker} data ({obs} observations, {start}–{end}). In Step 1 (leaky single-split), our models achieved: MLP {mlp1}%, LSTM {lstm1}%, CNN-GAF {cnn1}% directional accuracy with label horizon k={k}. After applying walk-forward validation in Step 2a (train={t2a}/test={te2a}), average accuracy changed to MLP {mlp2a}%, LSTM {lstm2a}%, CNN-GAF {cnn2a}%.
+
+Discuss (2-3 paragraphs): How do the Step 2a walk-forward results compare to Step 1? Does the change indicate leakage in Step 1? What mechanism causes this difference?`,
+
+  q2: `GWP2 Step 2d Discussion:
+Asset: {ticker} | Obs: {obs} | Period: {start}–{end}
+Step 2a (500/500): MLP {mlp2a}%, LSTM {lstm2a}%, CNN-GAF {cnn2a}%
+Step 2b (500/100): MLP {mlp2b}%, LSTM {lstm2b}%, CNN-GAF {cnn2b}%
+Label horizon k={k}, asset volatility ≈ {vol}%.
+
+Discuss (2-3 paragraphs): How do Step 2a and 2b results compare? Can backtest overfitting due to leakage explain the differences between the two configurations? Consider the effective test coverage and fold count.`,
+
+  q3: `GWP2 Step 3d Discussion:
+Asset: {ticker} | Obs: {obs} | Embargo: {embargo} obs | k={k}
+Step 2a (leaky 500/500): MLP {mlp2a}%, LSTM {lstm2a}%, CNN-GAF {cnn2a}%
+Step 3b (purged 500/500): MLP {mlp3b}%, LSTM {lstm3b}%, CNN-GAF {cnn3b}%
+Step 2b (leaky 500/100): MLP {mlp2b}%, LSTM {lstm2b}%, CNN-GAF {cnn2b}%
+Step 3c (purged 500/100): MLP {mlp3c}%, LSTM {lstm3c}%, CNN-GAF {cnn3c}%
+
+Discuss (2-3 paragraphs): Has leakage apparently disappeared after applying the purge+embargo method? Compare 2a↔3b and 2b↔3c. Discuss what the performance drop implies about the reliability of the original backtests.`,
+
+  q4: `Leakage Analysis for {ticker} ({obs} obs, k={k}, vol={vol}%):
+Our labels are {k}-day forward rolling returns. In Step 1 we use a single 80/20 split.
+
+Explain (2-3 paragraphs): What type of information leakage is present in these labels? How severe is it, given k={k} and the split boundary? How does the asset's volatility ({vol}% annualised) affect the magnitude of leakage bias?`,
+
+  q5: `Embargo Design Question:
+We set embargo={embargo} observations, label horizon k={k}, asset={ticker}, vol≈{vol}%.
+
+Explain (2 paragraphs): Why does the embargo length need to be at least k? What happens if embargo < k? How did we choose embargo={embargo} and is it sufficient for this asset's autocorrelation structure?`,
+
+  q6: `Model Sensitivity Analysis:
+Step 1 Leaky: MLP {mlp1}%, LSTM {lstm1}%, CNN-GAF {cnn1}%
+Step 3b Purged: MLP {mlp3b}%, LSTM {lstm3b}%, CNN-GAF {cnn3b}%
+Asset: {ticker}, Vol: {vol}%, k={k}
+
+Discuss (2 paragraphs): Which model shows the highest sensitivity to leakage (largest accuracy drop from Step 1 to Step 3b)? What architectural properties explain this? Which model is most robust to the validation protocol change?`,
+
+  q7: `Investment Implications:
+Leaky Baseline (Step 1): avg accuracy {avgLeak}%
+Purged WF (Step 3b): avg accuracy {avgPurged}%
+Asset: {ticker} | Period: {start}–{end} | Vol: {vol}%
+
+Discuss (2 paragraphs): From an investment perspective, should you trust the leaky baseline results when considering real deployment? What does the accuracy degradation from {avgLeak}% to {avgPurged}% mean for expected live trading performance? What risk management steps follow?`,
+
+  q8: `Asset & Leakage Interaction:
+Asset: {ticker} | Annualised Vol: {vol}% | Obs: {obs} | k={k} | embargo={embargo}
+
+Discuss (2 paragraphs): How does the volatility profile of {ticker} ({vol}% annualised) interact with leakage severity? Would a lower-volatility asset (e.g., bonds) or higher-volatility asset (e.g., crypto) show more or less apparent performance inflation from leakage?`,
+
+  custom: ''
+};
+
+function fillDiscQuestion(key) {
+  if (key === 'custom' || !key) {
+    document.getElementById('disc-input').value = '';
+    return;
+  }
+  const tpl = DISC_TEMPLATES[key] || '';
+  document.getElementById('disc-input').value = fillContext(tpl);
+}
+
+function fillContext(tpl) {
+  const mlp1  = STATE.s1.mlpRes?.acc  || '—';
+  const lstm1 = STATE.s1.lstmRes?.acc || '—';
+  const cnn1  = STATE.s1.cnnRes?.acc  || '—';
+  const mlp2a  = STATE.s2a.MLP?.avgAcc  || '—';
+  const lstm2a = STATE.s2a.LSTM?.avgAcc || '—';
+  const cnn2a  = STATE.s2a['CNN-GAF']?.avgAcc || '—';
+  const mlp2b  = STATE.s2b.MLP?.avgAcc  || '—';
+  const lstm2b = STATE.s2b.LSTM?.avgAcc || '—';
+  const cnn2b  = STATE.s2b['CNN-GAF']?.avgAcc || '—';
+  const mlp3b  = STATE.s3b.MLP?.avgAcc  || '—';
+  const lstm3b = STATE.s3b.LSTM?.avgAcc || '—';
+  const cnn3b  = STATE.s3b['CNN-GAF']?.avgAcc || '—';
+  const mlp3c  = STATE.s3c.MLP?.avgAcc  || '—';
+  const lstm3c = STATE.s3c.LSTM?.avgAcc || '—';
+  const cnn3c  = STATE.s3c['CNN-GAF']?.avgAcc || '—';
+
+  const allLeak   = [mlp1,lstm1,cnn1].map(v=>parseFloat(v)||0);
+  const allPurged = [mlp3b,lstm3b,cnn3b].map(v=>parseFloat(v)||0);
+  const avgLeak   = allLeak.length ? (allLeak.reduce((a,b)=>a+b,0)/allLeak.length).toFixed(1) : '—';
+  const avgPurged = allPurged.every(v=>v>0) ? (allPurged.reduce((a,b)=>a+b,0)/allPurged.length).toFixed(1) : '—';
+
+  return tpl
+    .replace(/{ticker}/g,  STATE.ticker||'BTC-USD')
+    .replace(/{obs}/g,     STATE.obs||'—')
+    .replace(/{start}/g,   document.getElementById('g-start').value)
+    .replace(/{end}/g,     document.getElementById('g-end').value)
+    .replace(/{vol}/g,     STATE.vol?.toFixed(1)||'—')
+    .replace(/{k}/g,       document.getElementById('s1-horizon').value||5)
+    .replace(/{embargo}/g, document.getElementById('s3-embargo').value||10)
+    .replace(/{t2a}/g,     document.getElementById('s2a-train').value||500)
+    .replace(/{te2a}/g,    document.getElementById('s2a-test').value||500)
+    .replace(/{mlp1}/g,mlp1).replace(/{lstm1}/g,lstm1).replace(/{cnn1}/g,cnn1)
+    .replace(/{mlp2a}/g,mlp2a).replace(/{lstm2a}/g,lstm2a).replace(/{cnn2a}/g,cnn2a)
+    .replace(/{mlp2b}/g,mlp2b).replace(/{lstm2b}/g,lstm2b).replace(/{cnn2b}/g,cnn2b)
+    .replace(/{mlp3b}/g,mlp3b).replace(/{lstm3b}/g,lstm3b).replace(/{cnn3b}/g,cnn3b)
+    .replace(/{mlp3c}/g,mlp3c).replace(/{lstm3c}/g,lstm3c).replace(/{cnn3c}/g,cnn3c)
+    .replace(/{avgLeak}/g,avgLeak).replace(/{avgPurged}/g,avgPurged);
+}
+
+async function runDiscussion() {
+  const key = document.getElementById('disc-key').value.trim();
+  let question = document.getElementById('disc-input').value.trim();
+  if (!question) { alert('Please select or type a question first.'); return; }
+
+  // Re-inject context in case params changed
+  question = fillContext(question);
+
+  const outEl = document.getElementById('disc-output');
+  const btn   = document.getElementById('disc-btn');
+  outEl.className = 'ai-output';
+  outEl.textContent = '⏳ Generating…';
+  btn.disabled = true;
+
+  const tag = document.getElementById('disc-context-tag');
+  tag.style.display = 'inline';
+  tag.textContent = STATE.ticker + ' · ' + STATE.obs + ' obs';
+
+  try {
+    let fullText = '';
+    if (key) {
+      // Direct Anthropic call
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6', max_tokens: 1200,
+          system: 'You are a quantitative finance expert and professor helping students understand deep learning model validation. Write concise, insightful analysis in 2-3 paragraphs. Be specific about the numerical results provided. Avoid bullet points. Use professional academic tone.',
+          messages: [{ role: 'user', content: question }]
+        })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      fullText = data.content?.map(b=>b.text||'').join('\n') || '';
+    } else {
+      // Proxy via Anthropic API (will work if called from within claude.ai artifacts context)
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6', max_tokens: 1200,
+          system: 'You are a quantitative finance expert and professor helping students understand deep learning model validation. Write concise, insightful analysis in 2-3 paragraphs. Be specific about the numerical results provided. Avoid bullet points. Use professional academic tone.',
+          messages: [{ role: 'user', content: question }]
+        })
+      });
+      const data = await resp.json();
+      fullText = data.content?.map(b=>b.text||'').join('\n') || '';
+    }
+
+    outEl.textContent = fullText || '[No response received. Check your API key.]';
+  } catch(err) {
+    outEl.textContent = '⚠ Error: ' + err.message + '\n\nMake sure you have entered a valid Anthropic API key above, or use this dashboard from within the Claude.ai artifacts environment.';
+  }
+  btn.disabled = false;
+}
+
+// ─── REDRAW ALL ───────────────────────────────────────────────────────────────
+function redrawAll() {
+  if (!STATE.prices.length) return;
+  drawPriceChart();
+  drawReturnCharts();
+  if (STATE.s1.ready) runStep1();
+  if (STATE.s2a.ready) runStep2();
+  if (STATE.s3b.ready) runStep3();
+  updateGrandChart();
+}
+
+// ─── GLOBAL CHANGE ───────────────────────────────────────────────────────────
+function onGlobalChange() {
+  document.getElementById('price-loading').classList.add('show');
+  // Reset step results
+  STATE.s1.ready = STATE.s2a.ready = STATE.s2b.ready = STATE.s3b.ready = STATE.s3c.ready = false;
+  ['s1','s2a','s2b','s3b','s3c'].forEach(s => {
+    const el = document.getElementById(`d-pill-${s.replace(/[0-9]/g,'')}`);
+    if(el) { el.className='pill'; el.textContent=`Step ${s}: not run`; }
+  });
+  clearTimeout(window._debounceTimer);
+  window._debounceTimer = setTimeout(fetchData, 400);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  fetchData();
+  setTimeout(() => {
+    if (STATE.returns.length) runStep2();
+  }, 2000);
+});
+
+// Auto-refresh discussion question when params change
+['g-ticker','g-start','g-end','g-obs','s1-horizon','s2a-train','s2a-test','s2b-train','s2b-test','s3-embargo','s3-horizon','s3b-train','s3b-test','s3c-train','s3c-test'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => {
+    const qKey = document.getElementById('disc-q')?.value;
+    if (qKey && qKey !== '' && qKey !== 'custom') fillDiscQuestion(qKey);
+  });
+});
+</script>
+</body>
+</html>

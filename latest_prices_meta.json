@@ -1,0 +1,27 @@
+{
+  "last_updated": "Jun 28 2026, 11:54 UTC (seed data \u2014 run GitHub Actions for live data)",
+  "tickers": [
+    "BTC-USD",
+    "ETH-USD",
+    "SPY",
+    "AAPL",
+    "GLD",
+    "TLT",
+    "TSLA"
+  ],
+  "rows": 1566,
+  "start": "2019-01-01",
+  "end": "2024-12-31",
+  "defaults": {
+    "start_date": "2019-01-01",
+    "end_date": "2024-12-31",
+    "max_obs": 2000,
+    "label_horizon": 5,
+    "step1_split": 80,
+    "step2a_train": 500,
+    "step2a_test": 500,
+    "step2b_train": 500,
+    "step2b_test": 100,
+    "step3_embargo": 10
+  }
+}
