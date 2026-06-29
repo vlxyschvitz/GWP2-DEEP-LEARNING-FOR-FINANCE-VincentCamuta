@@ -769,11 +769,25 @@ input[type="range"] {
   <!-- API Key -->
   <div class="card">
     <div class="card-title">AI Configuration <span class="badge">Context-Aware · Updates with Parameters</span></div>
-    <div class="ctrl-row" style="align-items:flex-start">
-      <div class="ctrl-group" style="flex:1;max-width:480px">
-        <label>Anthropic API Key <span style="font-weight:400;color:var(--text3)">(stays in your browser — never stored)</span></label>
+    <div class="ctrl-row" style="align-items:flex-end;flex-wrap:wrap;gap:12px">
+      <div class="ctrl-group">
+        <label>AI Provider</label>
+        <select id="disc-provider" onchange="updateProviderPlaceholder()" style="min-width:200px">
+          <option value="anthropic">Claude (Anthropic)</option>
+          <option value="gemini">Gemini (Google)</option>
+          <option value="grok">Grok (xAI)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">ChatGPT (OpenAI)</option>
+          <option value="pollinations">Pollinations AI (no key needed)</option>
+        </select>
+      </div>
+      <div class="ctrl-group" style="flex:1;min-width:260px">
+        <label>API Key <span style="font-weight:400;color:var(--text3)">(stays in your browser — never stored)</span></label>
         <input type="password" id="disc-key" placeholder="sk-ant-…" style="width:100%">
       </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px;font-family:var(--mono)" id="disc-provider-hint">
+      Anthropic · claude-sonnet-4-6 · get key at console.anthropic.com
     </div>
     <div class="pills" id="disc-pills">
       <span class="pill active" id="d-pill-ticker">Ticker: loading…</span>
@@ -815,8 +829,7 @@ input[type="range"] {
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="disc-btn" onclick="runDiscussion()">▶ Generate Discussion</button>
-        <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">claude-sonnet-4-6 · max 1,200 tokens</span>
-      </div>
+<span style="font-size:11px;color:var(--text3);font-family:var(--mono)" id="disc-model-label">claude-sonnet-4-6 · max 1,200 tokens</span>      </div>
     </div>
   </div>
 
@@ -1732,62 +1745,126 @@ function fillContext(tpl) {
     .replace(/{avgLeak}/g,avgLeak).replace(/{avgPurged}/g,avgPurged);
 }
 
-async function runDiscussion() {
-  const key = document.getElementById('disc-key').value.trim();
-  let question = document.getElementById('disc-input').value.trim();
-  if (!question) { alert('Please select or type a question first.'); return; }
+const PROVIDER_META = {
+  anthropic:   { hint: 'Anthropic · claude-sonnet-4-6 · console.anthropic.com',       placeholder: 'sk-ant-…',  label: 'claude-sonnet-4-6 · max 1,200 tokens' },
+  gemini:      { hint: 'Google · gemini-1.5-flash · aistudio.google.com/apikey',       placeholder: 'AIza…',     label: 'gemini-1.5-flash · max 1,200 tokens' },
+  grok:        { hint: 'xAI · grok-beta · console.x.ai',                               placeholder: 'xai-…',     label: 'grok-beta · max 1,200 tokens' },
+  deepseek:    { hint: 'DeepSeek · deepseek-chat · platform.deepseek.com',             placeholder: 'sk-…',      label: 'deepseek-chat · max 1,200 tokens' },
+  openai:      { hint: 'OpenAI · gpt-4o-mini · platform.openai.com/api-keys',          placeholder: 'sk-…',      label: 'gpt-4o-mini · max 1,200 tokens' },
+  pollinations:{ hint: 'Pollinations AI · no API key needed — free & open',            placeholder: '(no key needed)', label: 'openai via pollinations.ai · free' },
+};
 
-  // Re-inject context in case params changed
+function updateProviderPlaceholder() {
+  const p = document.getElementById('disc-provider').value;
+  const m = PROVIDER_META[p];
+  document.getElementById('disc-key').placeholder        = m.placeholder;
+  document.getElementById('disc-provider-hint').textContent = m.hint;
+  document.getElementById('disc-model-label').textContent   = m.label;
+  if (p === 'pollinations') {
+    document.getElementById('disc-key').disabled = true;
+    document.getElementById('disc-key').style.opacity = '.4';
+  } else {
+    document.getElementById('disc-key').disabled = false;
+    document.getElementById('disc-key').style.opacity = '1';
+  }
+}
+
+async function callAI(provider, key, question) {
+  const SYS = 'You are a quantitative finance expert and professor helping students understand deep learning model validation. Write concise, insightful analysis in 2-3 paragraphs. Be specific about the numerical results provided. Avoid bullet points. Use professional academic tone.';
+
+  if (provider === 'anthropic') {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200, system: SYS, messages: [{ role: 'user', content: question }] })
+    });
+    const d = await resp.json();
+    if (d.error) throw new Error(d.error.message);
+    return d.content?.map(b=>b.text||'').join('\n') || '';
+  }
+
+  if (provider === 'gemini') {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: SYS + '\n\n' + question }] }], generationConfig: { maxOutputTokens: 1200 } })
+    });
+    const d = await resp.json();
+    if (d.error) throw new Error(d.error.message);
+    return d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  }
+
+  if (provider === 'grok') {
+    const resp = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ model: 'grok-beta', max_tokens: 1200, messages: [{ role: 'system', content: SYS }, { role: 'user', content: question }] })
+    });
+    const d = await resp.json();
+    if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
+    return d.choices?.[0]?.message?.content || '';
+  }
+
+  if (provider === 'deepseek') {
+    const resp = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ model: 'deepseek-chat', max_tokens: 1200, messages: [{ role: 'system', content: SYS }, { role: 'user', content: question }] })
+    });
+    const d = await resp.json();
+    if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
+    return d.choices?.[0]?.message?.content || '';
+  }
+
+  if (provider === 'openai') {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 1200, messages: [{ role: 'system', content: SYS }, { role: 'user', content: question }] })
+    });
+    const d = await resp.json();
+    if (d.error) throw new Error(d.error.message);
+    return d.choices?.[0]?.message?.content || '';
+  }
+
+  if (provider === 'pollinations') {
+    const encoded = encodeURIComponent(SYS + '\n\n' + question);
+    const resp = await fetch(`https://text.pollinations.ai/${encoded}`);
+    if (!resp.ok) throw new Error('Pollinations request failed: ' + resp.status);
+    return await resp.text();
+  }
+
+  throw new Error('Unknown provider: ' + provider);
+}
+
+async function runDiscussion() {
+  const provider = document.getElementById('disc-provider').value;
+  const key      = document.getElementById('disc-key').value.trim();
+  let question   = document.getElementById('disc-input').value.trim();
+
+  if (!question) { alert('Please select or type a question first.'); return; }
+  if (provider !== 'pollinations' && !key) { alert('Please enter your API key for the selected provider.'); return; }
+
   question = fillContext(question);
 
   const outEl = document.getElementById('disc-output');
   const btn   = document.getElementById('disc-btn');
-  outEl.className = 'ai-output';
+  outEl.className  = 'ai-output';
   outEl.textContent = '⏳ Generating…';
   btn.disabled = true;
 
   const tag = document.getElementById('disc-context-tag');
   tag.style.display = 'inline';
-  tag.textContent = STATE.ticker + ' · ' + STATE.obs + ' obs';
+  tag.textContent = STATE.ticker + ' · ' + STATE.obs + ' obs · ' + PROVIDER_META[provider].label.split(' ·')[0];
 
   try {
-    let fullText = '';
-    if (key) {
-      // Direct Anthropic call
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6', max_tokens: 1200,
-          system: 'You are a quantitative finance expert and professor helping students understand deep learning model validation. Write concise, insightful analysis in 2-3 paragraphs. Be specific about the numerical results provided. Avoid bullet points. Use professional academic tone.',
-          messages: [{ role: 'user', content: question }]
-        })
-      });
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error.message);
-      fullText = data.content?.map(b=>b.text||'').join('\n') || '';
-    } else {
-      // Proxy via Anthropic API (will work if called from within claude.ai artifacts context)
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6', max_tokens: 1200,
-          system: 'You are a quantitative finance expert and professor helping students understand deep learning model validation. Write concise, insightful analysis in 2-3 paragraphs. Be specific about the numerical results provided. Avoid bullet points. Use professional academic tone.',
-          messages: [{ role: 'user', content: question }]
-        })
-      });
-      const data = await resp.json();
-      fullText = data.content?.map(b=>b.text||'').join('\n') || '';
-    }
-
-    outEl.textContent = fullText || '[No response received. Check your API key.]';
+    const text = await callAI(provider, key, question);
+    outEl.textContent = text || '[No response received. Check your API key.]';
   } catch(err) {
-    outEl.textContent = '⚠ Error: ' + err.message + '\n\nMake sure you have entered a valid Anthropic API key above, or use this dashboard from within the Claude.ai artifacts environment.';
+    outEl.textContent = '⚠ Error: ' + err.message + '\n\nCheck your API key and provider selection.';
   }
   btn.disabled = false;
 }
-
 // ─── REDRAW ALL ───────────────────────────────────────────────────────────────
 function redrawAll() {
   if (!STATE.prices.length) return;
