@@ -25,7 +25,7 @@ START   = "2017-01-01"   # far enough back for crypto
 END     = datetime.utcnow().strftime("%Y-%m-%d")
 MAX_OBS = 2000
 
-OUT_DIR  = Path(__file__).parent.parent / "data"
+OUT_DIR  = Path(__file__).parent / "data"
 OUT_CSV  = OUT_DIR / "latest_prices.csv"
 OUT_META = OUT_DIR / "latest_prices_meta.json"
 
