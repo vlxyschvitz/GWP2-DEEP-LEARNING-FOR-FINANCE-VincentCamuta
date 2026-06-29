@@ -1,0 +1,27 @@
+{
+  "last_updated": "Jun 29 2026, 11:46 UTC",
+  "tickers": [
+    "BTC-USD",
+    "ETH-USD",
+    "SPY",
+    "AAPL",
+    "GLD",
+    "TLT",
+    "TSLA"
+  ],
+  "rows": 2626,
+  "start": "2018-07-12",
+  "end": "2026-06-28",
+  "defaults": {
+    "start_date": "2019-01-01",
+    "end_date": "2026-06-29",
+    "max_obs": 2000,
+    "label_horizon": 5,
+    "step1_split": 80,
+    "step2a_train": 500,
+    "step2a_test": 500,
+    "step2b_train": 500,
+    "step2b_test": 100,
+    "step3_embargo": 10
+  }
+}
